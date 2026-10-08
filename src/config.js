@@ -20,9 +20,9 @@ export const startingText = 'O';
 // Whether the code shows next to the drawing, in the lerp and Bézier steps.
 export const showCode = true;
 
-// Whether the last step, the letter, shows its code and how many of the
-// font's curves are cubic, quadratic or straight.
-export const showLetterCode = true;
+// Whether the letter step shows its code. When it does not, it shows the
+// font's file type and how many of its curves are cubic, quadratic or straight.
+export const showLetterCode = false;
 
 // Whether the "anchor point / control point" legend shows above the code.
 export const showLegend = true;

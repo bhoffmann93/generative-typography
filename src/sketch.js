@@ -14,7 +14,7 @@
 import p5 from 'p5';
 import { createGUI } from './lib/gui.js';
 import { findPointAt } from './lib/drag.js';
-import { applyFont, defaultFont, fontOptions, textToCurves } from './lib/font/index.js';
+import { applyFont, defaultFont, fontOptions, textToCurves, drawCurves, getCenter } from './lib/font/index.js';
 import {
   startingText,
   showCode,
@@ -48,6 +48,7 @@ const STEPS = [
   { title: 'Quadratic Bézier', pointCount: 3, lerpRounds: 2, showCurve: true },
   { title: 'Cubic Bézier', pointCount: 4, lerpRounds: 3, showCurve: true, showHandles: true },
   { title: 'A letter is made of Béziers', showLetter: true, stopAtEnd: true },
+  { title: 'What the font file stores', showTable: true },
 ];
 
 const POINT_NAMES = ['A', 'B', 'C', 'D'];
@@ -61,6 +62,8 @@ const lineColor = { r: 110, g: 110, b: 110 };
 // A to B and C to D in the cubic step: a darker blue than the control points,
 // so they read as handles, as in Illustrator
 const handleLineColor = { r: 30, g: 100, b: 125 };
+// the letter's outline behind the numbered points in the last step
+const outlineColor = { r: 170, g: 170, b: 170 };
 
 // one color per round of lerps: AB, then ABC, then ABCD
 const roundColors = [
@@ -91,6 +94,10 @@ const ARROW_OUTER = 90;
 // where the play button sits, measured left from the slider's start
 const PLAY_INNER = 20;
 const PLAY_OUTER = 90;
+
+// where each column of the point table starts, measured from CODE_X
+const TABLE_COLUMNS = { number: 0, kind: 40, x: 180, y: 240 };
+const TABLE_POINT_SIZE = 5;
 
 // how many straight pieces a curve is drawn with
 const CURVE_RESOLUTION = 100;
@@ -138,6 +145,8 @@ window.draw = function draw() {
   translate(zoomedWidth() / 2, zoomedHeight() / 2);
   if (step.showLetter) {
     drawLetterStep();
+  } else if (step.showTable) {
+    drawFontPoints();
   } else {
     drawLerpStep(step);
   }
@@ -145,8 +154,15 @@ window.draw = function draw() {
 
   drawTitle(step);
   drawLegend(step);
-  drawCode(codeLines(step));
-  drawSlider();
+  if (step.showLetter && !showLetterCode) {
+    drawFontInfo();
+  } else if (step.showTable) {
+    drawPointTable();
+  } else {
+    drawCode(codeLines(step));
+  }
+  //the table has no t, so it has no slider
+  if (!step.showTable) drawSlider();
   pop();
 
   updateCursor();
@@ -318,7 +334,6 @@ function codeLines(step) {
   //src/config.js decides which steps show their code
   if (!step.showLetter && !showCode) return [];
   if (step.showLetter) {
-    if (!showLetterCode) return [];
     lines.push({ code: `let letters = textToCurves(font, '${params.text}', 0, 0);`, color: params.foregroundColor });
     lines.push({ code: 'for (let curve of letters.flat(2)) {', color: params.foregroundColor });
     lines.push({ code: '  let points = [curve.from, ...curve.controls, curve.to];', color: params.foregroundColor });
@@ -343,17 +358,194 @@ function codeLines(step) {
 
 // How many of the letter's curves are straight, quadratic or cubic, going by
 // their number of handles. TrueType fonts (.ttf) only have quadratic curves.
-function curveCountLine() {
-  if (!currentFont) return '';
-
+function countCurves() {
   const counts = { straight: 0, quadratic: 0, cubic: 0 };
   const kinds = ['straight', 'quadratic', 'cubic'];
   for (const curve of textToCurves(currentFont, params.text, 0, 0).flat(2)) {
     counts[kinds[curve.controls.length]]++;
   }
+  return counts;
+}
 
-  const fontName = Object.keys(fontOptions).find((name) => fontOptions[name] === params.font);
-  return `${fontName}: ${counts.cubic} cubic, ${counts.quadratic} quadratic, ${counts.straight} straight`;
+function curveCountLine() {
+  if (!currentFont) return '';
+  const counts = countCurves();
+  return `${fontName()}: ${counts.cubic} cubic, ${counts.quadratic} quadratic, ${counts.straight} straight`;
+}
+
+function fontName() {
+  return Object.keys(fontOptions).find((name) => fontOptions[name] === params.font);
+}
+
+// .otf files usually store cubic Béziers, .ttf files quadratic ones. The file
+// ending is read from the font's url, e.g. '/fonts/Vollkorn-Black.otf'.
+function fontFileType() {
+  const ending = params.font.split('.').pop().toLowerCase();
+  if (ending === 'ttf') return { ending, name: 'TrueType', curves: 'quadratic Béziers: 1 control point' };
+  return { ending, name: 'OpenType', curves: 'cubic Béziers: 2 control points' };
+}
+
+// Left of the letter, in place of the code: the font's file type and how many
+// curves of each kind the letter has.
+function drawFontInfo() {
+  if (!currentFont) return;
+
+  const fileType = fontFileType();
+  const counts = countCurves();
+  const lines = [
+    { label: `${fontName()}.${fileType.ending}`, color: params.foregroundColor },
+    { label: `${fileType.name}, stores ${fileType.curves}`, color: lineColor },
+    { label: '', color: lineColor },
+    { label: `${counts.cubic} cubic`, color: params.foregroundColor },
+    { label: `${counts.quadratic} quadratic`, color: params.foregroundColor },
+    { label: `${counts.straight} straight`, color: params.foregroundColor },
+  ];
+
+  noStroke();
+  if (uiFont) textFont(uiFont);
+  textAlign(LEFT, TOP);
+  textSize(labelSize);
+  lines.forEach((infoLine, index) => {
+    fill(infoLine.color.r, infoLine.color.g, infoLine.color.b);
+    text(infoLine.label, CODE_X, CODE_Y + index * labelSize * CODE_LINE_SPACING);
+  });
+}
+
+// The points of the first letter, as the font file stores them: in font
+// units, with y = 0 on the baseline and y going up. Read at a text size of
+// one em, so one unit of the path is one unit of the font.
+function fontContours() {
+  const character = params.text.trim()[0];
+  if (!currentFont || !character) return [];
+
+  push();
+  textFont(currentFont);
+  textAlign(LEFT, BASELINE);
+  textSize(currentFont.data.head.unitsPerEm);
+  const contours = textToCurves(currentFont, character, 0, 0).flat();
+  pop();
+  return contours;
+}
+
+function fontPoints(contours) {
+  //each anchor and control point once, in the order the file lists them; the
+  //last curve ends where the first began, so its end is left out
+  const points = [];
+  contours.forEach((contour, contourIndex) => {
+    points.push({ position: contour[0].from, isAnchor: true, contourIndex });
+    contour.forEach((curve, curveIndex) => {
+      for (const control of curve.controls) {
+        points.push({ position: control, isAnchor: false, contourIndex });
+      }
+      if (curveIndex < contour.length - 1) points.push({ position: curve.to, isAnchor: true, contourIndex });
+    });
+  });
+  return points;
+}
+
+// The first letter, drawn from fontPoints() at the panel's size, each point
+// numbered like its row in the table.
+function drawFontPoints() {
+  const contours = fontContours();
+  const points = fontPoints(contours);
+  if (points.length === 0) return;
+
+  //font units to pixels, with the letter's middle at the canvas' middle
+  const pixelsPerUnit = params.textSize / currentFont.data.head.unitsPerEm;
+  const center = getCenter(points.map((point) => point.position));
+  const onScreen = points.map((point) =>
+    createVector((point.position.x - center.x) * pixelsPerUnit, (point.position.y - center.y) * pixelsPerUnit),
+  );
+
+  //the outline, so the points have something to sit on. It is drawn in font
+  //units and scaled down, so the stroke is scaled up by the same amount to
+  //stay 2 pixels thick
+  push();
+  noFill();
+  stroke(outlineColor.r, outlineColor.g, outlineColor.b);
+  strokeWeight(2 / pixelsPerUnit);
+  scale(pixelsPerUnit);
+  translate(-center.x, -center.y);
+  drawCurves([contours]);
+  pop();
+
+  if (uiFont) textFont(uiFont);
+  textAlign(LEFT, BOTTOM);
+  textSize(codeSize);
+  points.forEach((point, index) => {
+    drawDot(onScreen[index], point.isAnchor ? anchorColor : controlPointColor, '', LETTER_POINT_SIZE);
+    fill(params.foregroundColor.r, params.foregroundColor.g, params.foregroundColor.b);
+    text(index + 1, onScreen[index].x + LETTER_POINT_SIZE, onScreen[index].y - LETTER_POINT_SIZE / 2);
+  });
+}
+
+// The table left of the letter: one row per point, as many as fit.
+function drawPointTable() {
+  const points = fontPoints(fontContours());
+  if (points.length === 0) return;
+
+  const rowHeight = codeSize * CODE_LINE_SPACING;
+  const rows = [];
+  points.forEach((point, index) => {
+    //a new contour gets its own heading row; the second one in "O" is the counter
+    if (index === 0 || point.contourIndex !== points[index - 1].contourIndex) {
+      rows.push({ heading: `contour ${point.contourIndex + 1}` });
+    }
+    rows.push({ point, number: index + 1 });
+  });
+
+  const headerLines = [
+    `unitsPerEm ${currentFont.data.head.unitsPerEm}, baseline at y = 0, y goes up`,
+    `${points.length} points`,
+  ];
+
+  noStroke();
+  textFont('monospace');
+  textSize(codeSize);
+  fill(lineColor.r, lineColor.g, lineColor.b);
+  textAlign(LEFT, TOP);
+  headerLines.forEach((headerLine, index) => text(headerLine, CODE_X, CODE_Y + index * rowHeight));
+
+  const tableTop = CODE_Y + (headerLines.length + 1) * rowHeight;
+  const rowsThatFit = floor((zoomedHeight() - SLIDER_BOTTOM - tableTop) / rowHeight);
+  const visibleRows = rows.slice(0, rowsThatFit);
+  if (rowsThatFit > 0 && rows.length > rowsThatFit) visibleRows[rowsThatFit - 1] = { heading: `${rows.length - rowsThatFit + 1} more rows` };
+
+  drawTableRow({ number: '#', kind: 'point', x: 'x', y: 'y' }, tableTop - rowHeight, lineColor);
+  visibleRows.forEach((row, index) => {
+    const y = tableTop + index * rowHeight;
+    if (row.heading) {
+      fill(lineColor.r, lineColor.g, lineColor.b);
+      textAlign(LEFT, TOP);
+      text(row.heading, CODE_X, y);
+      return;
+    }
+
+    const dotColor = row.point.isAnchor ? anchorColor : controlPointColor;
+    drawDot(createVector(CODE_X + TABLE_COLUMNS.kind - TABLE_POINT_SIZE * 2, y + codeSize / 2), dotColor, '', TABLE_POINT_SIZE);
+    //+ 0 turns -0 into 0
+    const cells = {
+      number: row.number,
+      kind: row.point.isAnchor ? 'anchor' : 'control',
+      x: round(row.point.position.x) + 0,
+      y: round(-row.point.position.y) + 0,
+    };
+    drawTableRow(cells, y, params.foregroundColor);
+  });
+}
+
+// Names on the left of their column, numbers on the right, so the digits line up.
+function drawTableRow(cells, y, rowColor) {
+  noStroke();
+  textFont('monospace');
+  textSize(codeSize);
+  fill(rowColor.r, rowColor.g, rowColor.b);
+  textAlign(LEFT, TOP);
+  text(cells.number, CODE_X + TABLE_COLUMNS.number, y);
+  text(cells.kind, CODE_X + TABLE_COLUMNS.kind, y);
+  textAlign(RIGHT, TOP);
+  text(cells.x, CODE_X + TABLE_COLUMNS.x, y);
+  text(cells.y, CODE_X + TABLE_COLUMNS.y, y);
 }
 
 // Which dot is which, above the code. The curve starts and ends on anchor
@@ -361,7 +553,7 @@ function curveCountLine() {
 function drawLegend(step) {
   if (!showLegend) return;
 
-  const hasControlPoints = step.showLetter || step.pointCount > 2;
+  const hasControlPoints = step.showLetter || step.showTable || step.pointCount > 2;
   const entries = [{ label: 'anchor point', dotColor: anchorColor }];
   if (hasControlPoints) entries.push({ label: 'control point', dotColor: controlPointColor });
 
@@ -482,7 +674,8 @@ function setTFromMouse() {
 // The point under the mouse, measured from the middle like the points are.
 function controlPointUnderMouse() {
   const step = STEPS[stepIndex];
-  if (step.showLetter) return null;
+  //only the lerp and Bézier steps have points to drag
+  if (!step.pointCount) return null;
   const points = controlPoints.slice(0, step.pointCount);
   return findPointAt(points, zoomedMouseX() - zoomedWidth() / 2, zoomedMouseY() - zoomedHeight() / 2, GRAB_RADIUS);
 }
