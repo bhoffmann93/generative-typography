@@ -42,8 +42,10 @@ export function createGUI({ params, onFontChange = () => {}, addControls = () =>
   //a function on an object is how lil-gui makes a button
   gui.add({ exportPNG: () => savePNG() }, 'exportPNG').name('Export PNG');
 
-  //hiding the panel leaves a clean canvas to screenshot or record
-  let visible = true;
+  //the panel starts hidden so the canvas opens clean; press g to show it.
+  //hiding it again leaves a clean canvas to screenshot or record
+  let visible = false;
+  gui.show(visible);
   const toggle = () => {
     visible = !visible;
     gui.show(visible);
