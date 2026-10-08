@@ -20,6 +20,7 @@ import {
   showCode,
   showLetterCode,
   showLegend,
+  startingZoom,
   codeSize,
   labelSize,
   curveStrokeWeight,
@@ -34,7 +35,8 @@ import {
 const params = {
   text: startingText,
   font: defaultFont,
-  textSize: 650,
+  textSize: 550,
+  zoom: startingZoom,
   foregroundColor,
   backgroundColor,
 };
@@ -128,8 +130,12 @@ window.draw = function draw() {
   const step = STEPS[stepIndex];
   if (playing) advanceT(step);
 
+  //everything below is drawn bigger by the zoom, like zooming the browser
   push();
-  translate(width / 2, height / 2);
+  scale(params.zoom);
+
+  push();
+  translate(zoomedWidth() / 2, zoomedHeight() / 2);
   if (step.showLetter) {
     drawLetterStep();
   } else {
@@ -141,8 +147,29 @@ window.draw = function draw() {
   drawLegend(step);
   drawCode(codeLines(step));
   drawSlider();
+  pop();
+
   updateCursor();
 };
+
+// The canvas size and the mouse, measured in zoomed pixels. With a zoom of 2
+// the canvas holds half as many of them, so the layout and the mouse use
+// these instead of width, height, mouseX and mouseY.
+function zoomedWidth() {
+  return width / params.zoom;
+}
+
+function zoomedHeight() {
+  return height / params.zoom;
+}
+
+function zoomedMouseX() {
+  return mouseX / params.zoom;
+}
+
+function zoomedMouseY() {
+  return mouseY / params.zoom;
+}
 
 function drawLerpStep(step) {
   const points = controlPoints.slice(0, step.pointCount);
@@ -376,18 +403,22 @@ function drawTitle(step) {
   textAlign(CENTER, CENTER);
 
   textSize(TITLE_SIZE);
-  text(step.title, width / 2, TITLE_Y);
+  text(step.title, zoomedWidth() / 2, TITLE_Y);
 
   textSize(labelSize);
-  text(`←     ${stepIndex + 1} / ${STEPS.length}     →`, width / 2, NAVIGATION_Y);
+  text(`←     ${stepIndex + 1} / ${STEPS.length}     →`, zoomedWidth() / 2, NAVIGATION_Y);
 }
 
 function isOverPrevious(x, y) {
-  return abs(y - NAVIGATION_Y) < GRAB_RADIUS && x > width / 2 - ARROW_OUTER && x < width / 2 - ARROW_INNER;
+  return (
+    abs(y - NAVIGATION_Y) < GRAB_RADIUS && x > zoomedWidth() / 2 - ARROW_OUTER && x < zoomedWidth() / 2 - ARROW_INNER
+  );
 }
 
 function isOverNext(x, y) {
-  return abs(y - NAVIGATION_Y) < GRAB_RADIUS && x > width / 2 + ARROW_INNER && x < width / 2 + ARROW_OUTER;
+  return (
+    abs(y - NAVIGATION_Y) < GRAB_RADIUS && x > zoomedWidth() / 2 + ARROW_INNER && x < zoomedWidth() / 2 + ARROW_OUTER
+  );
 }
 
 //every step starts at t = 0 and paused
@@ -401,19 +432,19 @@ function changeStep(direction) {
 
 //half the slider's length: 225 pixels, or less on a narrow window
 function sliderHalfLength() {
-  return min(225, width * 0.225);
+  return min(225, zoomedWidth() * 0.225);
 }
 
 function sliderLeft() {
-  return width / 2 - sliderHalfLength();
+  return zoomedWidth() / 2 - sliderHalfLength();
 }
 
 function sliderRight() {
-  return width / 2 + sliderHalfLength();
+  return zoomedWidth() / 2 + sliderHalfLength();
 }
 
 function sliderY() {
-  return height - SLIDER_BOTTOM;
+  return zoomedHeight() - SLIDER_BOTTOM;
 }
 
 function drawSlider() {
@@ -445,7 +476,7 @@ function isOverPlay(x, y) {
 }
 
 function setTFromMouse() {
-  t = constrain(map(mouseX, sliderLeft(), sliderRight(), 0, 1), 0, 1);
+  t = constrain(map(zoomedMouseX(), sliderLeft(), sliderRight(), 0, 1), 0, 1);
 }
 
 // The point under the mouse, measured from the middle like the points are.
@@ -453,7 +484,7 @@ function controlPointUnderMouse() {
   const step = STEPS[stepIndex];
   if (step.showLetter) return null;
   const points = controlPoints.slice(0, step.pointCount);
-  return findPointAt(points, mouseX - width / 2, mouseY - height / 2, GRAB_RADIUS);
+  return findPointAt(points, zoomedMouseX() - zoomedWidth() / 2, zoomedMouseY() - zoomedHeight() / 2, GRAB_RADIUS);
 }
 
 // Moves t on by one frame. Most steps loop back to 0; a step with stopAtEnd
@@ -480,15 +511,15 @@ window.mousePressed = function mousePressed(event) {
   //the control panel sits on top of the canvas, so clicks on it are ignored
   if (event.target.tagName !== 'CANVAS') return;
 
-  if (isOverPrevious(mouseX, mouseY)) return changeStep(-1);
-  if (isOverNext(mouseX, mouseY)) return changeStep(1);
+  if (isOverPrevious(zoomedMouseX(), zoomedMouseY())) return changeStep(-1);
+  if (isOverNext(zoomedMouseX(), zoomedMouseY())) return changeStep(1);
 
-  if (isOverPlay(mouseX, mouseY)) {
+  if (isOverPlay(zoomedMouseX(), zoomedMouseY())) {
     togglePlaying();
     return;
   }
 
-  if (isOverSlider(mouseX, mouseY)) {
+  if (isOverSlider(zoomedMouseX(), zoomedMouseY())) {
     draggingSlider = true;
     playing = false;
     setTFromMouse();
@@ -500,7 +531,7 @@ window.mousePressed = function mousePressed(event) {
 
 window.mouseDragged = function mouseDragged() {
   if (draggingSlider) setTFromMouse();
-  if (draggedPoint) draggedPoint.set(mouseX - width / 2, mouseY - height / 2);
+  if (draggedPoint) draggedPoint.set(zoomedMouseX() - zoomedWidth() / 2, zoomedMouseY() - zoomedHeight() / 2);
 };
 
 window.mouseReleased = function mouseReleased() {
@@ -513,10 +544,10 @@ function updateCursor() {
     draggedPoint ||
     draggingSlider ||
     controlPointUnderMouse() ||
-    isOverSlider(mouseX, mouseY) ||
-    isOverPlay(mouseX, mouseY) ||
-    isOverPrevious(mouseX, mouseY) ||
-    isOverNext(mouseX, mouseY);
+    isOverSlider(zoomedMouseX(), zoomedMouseY()) ||
+    isOverPlay(zoomedMouseX(), zoomedMouseY()) ||
+    isOverPrevious(zoomedMouseX(), zoomedMouseY()) ||
+    isOverNext(zoomedMouseX(), zoomedMouseY());
   cursor(overSomething ? HAND : ARROW);
 }
 
@@ -535,5 +566,9 @@ window.windowResized = function windowResized() {
 
 // Builds the control panel, then starts p5. p5 looks for the setup() and
 // draw() you defined above and runs them.
-createGUI({ params, onFontChange: changeFont });
+function addControls(gui) {
+  gui.add(params, 'zoom', 0.5, 3, 0.1);
+}
+
+createGUI({ params, onFontChange: changeFont, addControls });
 new p5();

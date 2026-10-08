@@ -27,6 +27,10 @@ export const showLetterCode = true;
 // Whether the "anchor point / control point" legend shows above the code.
 export const showLegend = true;
 
+// How big everything is drawn: the points, text, lines and letter. 1.5 looks
+// like the browser zoomed to 150%. Change it in the panel while it runs.
+export const startingZoom = 1.5;
+
 // Text sizes in pixels: the code, and the labels (point names, t, play,
 // legend and the step counter).
 export const codeSize = 12;
