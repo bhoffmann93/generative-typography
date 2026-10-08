@@ -9,6 +9,9 @@ const HANDLE_DOT_SIZE = 6;
 
 const anchorColor = { r: 255, g: 160, b: 0 };
 const handleColor = { r: 0, g: 200, b: 255 };
+//the line from anchor to handle is a see-through blue, so it reads as a
+//guide and stays behind the anchors and handles themselves
+const handleLineColor = { r: 0, g: 120, b: 255, a: 110 };
 
 // Reads the outlines of `str` as it would be drawn by text(str, x, y), using
 // whatever textSize() and textAlign() are set right now.
@@ -119,12 +122,13 @@ export function drawHandles(curve) {
   square(curve.from.x, curve.from.y, HANDLE_DOT_SIZE);
 
   if (curve.controls.length > 0) {
-    stroke(handleColor.r, handleColor.g, handleColor.b);
     const firstControl = curve.controls[0];
     const lastControl = curve.controls[curve.controls.length - 1];
+    stroke(handleLineColor.r, handleLineColor.g, handleLineColor.b, handleLineColor.a);
     line(curve.from.x, curve.from.y, firstControl.x, firstControl.y);
     line(curve.to.x, curve.to.y, lastControl.x, lastControl.y);
 
+    stroke(handleColor.r, handleColor.g, handleColor.b);
     for (const control of curve.controls) {
       circle(control.x, control.y, HANDLE_DOT_SIZE);
     }
