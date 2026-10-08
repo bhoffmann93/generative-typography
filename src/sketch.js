@@ -34,7 +34,7 @@ import {
 const params = {
   text: startingText,
   font: defaultFont,
-  textSize: 500,
+  textSize: 650,
   foregroundColor,
   backgroundColor,
 };
@@ -44,8 +44,8 @@ const STEPS = [
   { title: 'Two lerps', pointCount: 3, lerpRounds: 1 },
   { title: 'Connect the lerps', pointCount: 3, lerpRounds: 2 },
   { title: 'Quadratic Bézier', pointCount: 3, lerpRounds: 2, showCurve: true },
-  { title: 'Cubic Bézier', pointCount: 4, lerpRounds: 3, showCurve: true },
-  { title: 'A letter is made of Béziers', showLetter: true },
+  { title: 'Cubic Bézier', pointCount: 4, lerpRounds: 3, showCurve: true, showHandles: true },
+  { title: 'A letter is made of Béziers', showLetter: true, stopAtEnd: true },
 ];
 
 const POINT_NAMES = ['A', 'B', 'C', 'D'];
@@ -56,6 +56,9 @@ const UI_FONT = 'Inter-Medium';
 const anchorColor = { r: 204, g: 143, b: 41 };
 const controlPointColor = { r: 41, g: 169, b: 204 };
 const lineColor = { r: 110, g: 110, b: 110 };
+// A to B and C to D in the cubic step: a darker blue than the control points,
+// so they read as handles, as in Illustrator
+const handleLineColor = { r: 30, g: 100, b: 125 };
 
 // one color per round of lerps: AB, then ABC, then ABCD
 const roundColors = [
@@ -122,9 +125,8 @@ window.setup = async function setup() {
 
 window.draw = function draw() {
   background(params.backgroundColor.r, params.backgroundColor.g, params.backgroundColor.b);
-  if (playing) t = (t + deltaTime / 1000 / PLAY_SECONDS) % 1;
-
   const step = STEPS[stepIndex];
+  if (playing) advanceT(step);
 
   push();
   translate(width / 2, height / 2);
@@ -151,6 +153,13 @@ function drawLerpStep(step) {
   for (let roundIndex = 0; roundIndex < rounds.length - 1; roundIndex++) {
     const lineStroke = roundIndex === 0 ? lineColor : roundColors[roundIndex - 1];
     drawLines(rounds[roundIndex], lineStroke);
+  }
+
+  //drawn over the grey lines, which leaves only B to C grey
+  if (step.showHandles) {
+    const last = points.length - 1;
+    drawLines([points[0], points[1]], handleLineColor);
+    drawLines([points[last - 1], points[last]], handleLineColor);
   }
 
   if (step.showCurve) {
@@ -447,6 +456,26 @@ function controlPointUnderMouse() {
   return findPointAt(points, mouseX - width / 2, mouseY - height / 2, GRAB_RADIUS);
 }
 
+// Moves t on by one frame. Most steps loop back to 0; a step with stopAtEnd
+// stops at t = 1, so the letter is left fully drawn.
+function advanceT(step) {
+  t += deltaTime / 1000 / PLAY_SECONDS;
+  if (t < 1) return;
+
+  if (step.stopAtEnd) {
+    t = 1;
+    playing = false;
+  } else {
+    t = t % 1;
+  }
+}
+
+// Pressing play at the end starts again from 0.
+function togglePlaying() {
+  if (!playing && t >= 1) t = 0;
+  playing = !playing;
+}
+
 window.mousePressed = function mousePressed(event) {
   //the control panel sits on top of the canvas, so clicks on it are ignored
   if (event.target.tagName !== 'CANVAS') return;
@@ -455,7 +484,7 @@ window.mousePressed = function mousePressed(event) {
   if (isOverNext(mouseX, mouseY)) return changeStep(1);
 
   if (isOverPlay(mouseX, mouseY)) {
-    playing = !playing;
+    togglePlaying();
     return;
   }
 
@@ -497,7 +526,7 @@ window.keyPressed = function keyPressed(event) {
 
   if (keyCode === LEFT_ARROW) changeStep(-1);
   if (keyCode === RIGHT_ARROW) changeStep(1);
-  if (key === ' ') playing = !playing;
+  if (key === ' ') togglePlaying();
 };
 
 window.windowResized = function windowResized() {
