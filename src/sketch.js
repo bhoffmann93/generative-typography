@@ -42,7 +42,7 @@ const params = {
 };
 
 const STEPS = [
-  { title: 'Interpolation', showIntro: true },
+  { title: 'Interpolation == Mixing Values', showIntro: true },
   { title: 'lerp | mix values', showValues: true },
   { title: 'lerp | mix positions', pointCount: 2, lerpRounds: 1 },
   { title: 'Two lerps', pointCount: 3, lerpRounds: 1 },
