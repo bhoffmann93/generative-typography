@@ -49,6 +49,7 @@ const STEPS = [
   { title: 'Connect the lerps', pointCount: 3, lerpRounds: 2 },
   { title: 'Quadratic Bézier', pointCount: 3, lerpRounds: 2, showCurve: true },
   { title: 'Cubic Bézier', pointCount: 4, lerpRounds: 3, showCurve: true, showHandles: true },
+  { title: 'Just the curve', pointCount: 4, showCurveOnly: true },
   { title: 'A letter is made of Béziers', showLetter: true, stopAtEnd: true },
   { title: 'What the font file stores', showTable: true },
 ];
@@ -171,6 +172,8 @@ window.draw = function draw() {
     drawLetterStep();
   } else if (step.showTable) {
     drawFontPoints();
+  } else if (step.showCurveOnly) {
+    drawCurveOnlyStep(step);
   } else {
     drawLerpStep(step);
   }
@@ -300,6 +303,23 @@ function drawLerpStep(step) {
   }
 }
 
+// The cubic Bézier with all the lerps taken away: the whole curve, its four
+// points, unlabelled, and the handles. t is fixed at 1 here, so the curve is always complete.
+function drawCurveOnlyStep(step) {
+  const points = controlPoints.slice(0, step.pointCount);
+  //the handles, A to B and C to D, as in Illustrator
+  drawLines([points[0], points[1]], handleLineColor);
+  drawLines([points[2], points[3]], handleLineColor);
+
+  //the yellow of the last round of lerps, as in the Cubic Bézier step
+  drawCurveUpTo(points, 1, roundColors[2], curveStrokeWeight);
+
+  points.forEach((position, index) => {
+    const isAnchor = index === 0 || index === points.length - 1;
+    drawDot(position, isAnchor ? anchorColor : controlPointColor, '');
+  });
+}
+
 // Every round of lerps, from the points down to fewer points:
 // [[A, B, C, D], [AB, BC, CD], [ABC, BCD], [ABCD]]
 function lerpRounds(points, amount, roundCount) {
@@ -412,8 +432,9 @@ function codeLines(step) {
 
   //src/config.js decides which steps show their code
   if (!step.showLetter && !showCode) return [];
-  //the intro has no code, and the values step has its pseudocode under the shapes
-  if (step.showIntro || step.showValues) return [];
+  //the intro has no code, the values step has its pseudocode under the shapes,
+  //and the curve-only step shows nothing but the curve
+  if (step.showIntro || step.showValues || step.showCurveOnly) return [];
   if (step.showLetter) {
     lines.push({ code: `let letters = textToCurves(font, '${params.text}', 0, 0);`, color: params.foregroundColor });
     lines.push({ code: 'for (let curve of letters.flat(2)) {', color: params.foregroundColor });
@@ -638,8 +659,9 @@ function drawTableRow(cells, y, rowColor) {
 // Which dot is which, above the code. The curve starts and ends on anchor
 // points; control points pull it towards them without it touching them.
 function drawLegend(step) {
-  //the intro and the values step have no points, so nothing to explain
-  if (!showLegend || step.showIntro || step.showValues) return;
+  //the intro and the values step have no points, so nothing to explain, and
+  //the curve-only step shows nothing but the curve
+  if (!showLegend || step.showIntro || step.showValues || step.showCurveOnly) return;
 
   const hasControlPoints = step.showLetter || step.showTable || step.pointCount > 2;
   const entries = [{ label: 'anchor point', dotColor: anchorColor }];
@@ -747,9 +769,10 @@ function drawSlider() {
   text(playing ? 'pause' : 'play', sliderLeft() - PLAY_INNER, sliderY());
 }
 
-// The intro has no t yet, and the table has no t at all, so neither has a slider.
+// The intro has no t yet, the table has no t at all, and the curve-only step
+// keeps t at 1, so none of them has a slider.
 function hasSlider(step) {
-  return !step.showIntro && !step.showTable;
+  return !step.showIntro && !step.showTable && !step.showCurveOnly;
 }
 
 function isOverSlider(x, y) {
