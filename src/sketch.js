@@ -42,7 +42,8 @@ const params = {
 };
 
 const STEPS = [
-  { title: 'lerp | mix', pointCount: 2, lerpRounds: 1 },
+  { title: 'lerp | mix values', showValues: true },
+  { title: 'lerp | mix positions', pointCount: 2, lerpRounds: 1 },
   { title: 'Two lerps', pointCount: 3, lerpRounds: 1 },
   { title: 'Connect the lerps', pointCount: 3, lerpRounds: 2 },
   { title: 'Quadratic Bézier', pointCount: 3, lerpRounds: 2, showCurve: true },
@@ -71,6 +72,20 @@ const roundColors = [
   { r: 204, g: 98, b: 143 },
   { r: 204, g: 182, b: 79 },
 ];
+
+// The first step: a circle that turns from red to green, a square that grows
+// and an arrow that turns, all three lerped by t.
+const valueRed = { r: 220, g: 50, b: 50 };
+const valueGreen = { r: 60, g: 190, b: 90 };
+const valueSquareSize = { from: 40, to: 180 };
+const valueAngle = { from: 0, to: 180 };
+const VALUE_CIRCLE_SIZE = 150;
+const VALUE_ARROW = { length: 160, thickness: 16, headSize: 50 };
+
+// how far the left and right shape sit from the middle, and how far below
+// the shapes their line of pseudocode sits
+const VALUE_SPACING = 300;
+const VALUE_LABEL_Y = 140;
 
 const POINT_SIZE = 14;
 const LETTER_POINT_SIZE = 7;
@@ -143,7 +158,9 @@ window.draw = function draw() {
 
   push();
   translate(zoomedWidth() / 2, zoomedHeight() / 2);
-  if (step.showLetter) {
+  if (step.showValues) {
+    drawValuesStep();
+  } else if (step.showLetter) {
     drawLetterStep();
   } else if (step.showTable) {
     drawFontPoints();
@@ -185,6 +202,48 @@ function zoomedMouseX() {
 
 function zoomedMouseY() {
   return mouseY / params.zoom;
+}
+
+// lerp mixes any two values, not only positions: a color, a size, an angle.
+// Each shape stays where it is; only the one value changes with t.
+function drawValuesStep() {
+  noStroke();
+  rectMode(CENTER);
+
+  //color
+  const redColor = color(valueRed.r, valueRed.g, valueRed.b);
+  const greenColor = color(valueGreen.r, valueGreen.g, valueGreen.b);
+  //lerpColor mixes in the current color mode. In RGB the middle is a muddy
+  //brown; in HSB the hue turns from red through orange and yellow to green
+  colorMode(HSB);
+  fill(lerpColor(redColor, greenColor, t));
+  colorMode(RGB);
+  circle(-VALUE_SPACING, 0, VALUE_CIRCLE_SIZE);
+
+  //size
+  const squareSize = lerp(valueSquareSize.from, valueSquareSize.to, t);
+  fill(params.foregroundColor.r, params.foregroundColor.g, params.foregroundColor.b);
+  square(0, 0, squareSize);
+
+  //rotation
+  push();
+  translate(VALUE_SPACING, 0);
+  rotate(radians(lerp(valueAngle.from, valueAngle.to, t)));
+  //pointing right at 0°: a shaft, then a triangle for the head
+  const tip = VALUE_ARROW.length / 2;
+  const headStart = tip - VALUE_ARROW.headSize;
+  rect(-VALUE_ARROW.headSize / 2, 0, VALUE_ARROW.length - VALUE_ARROW.headSize, VALUE_ARROW.thickness);
+  triangle(headStart, -VALUE_ARROW.headSize / 2, tip, 0, headStart, VALUE_ARROW.headSize / 2);
+  pop();
+
+  rectMode(CORNER);
+
+  if (uiFont) textFont(uiFont);
+  textAlign(CENTER, TOP);
+  textSize(labelSize);
+  text('lerp(red, green, t)', -VALUE_SPACING, VALUE_LABEL_Y);
+  text('lerp(small, big, t)', 0, VALUE_LABEL_Y);
+  text('lerp(0°, 180°, t)', VALUE_SPACING, VALUE_LABEL_Y);
 }
 
 function drawLerpStep(step) {
@@ -333,6 +392,8 @@ function codeLines(step) {
 
   //src/config.js decides which steps show their code
   if (!step.showLetter && !showCode) return [];
+  //the values step has its pseudocode under the shapes instead
+  if (step.showValues) return [];
   if (step.showLetter) {
     lines.push({ code: `let letters = textToCurves(font, '${params.text}', 0, 0);`, color: params.foregroundColor });
     lines.push({ code: 'for (let curve of letters.flat(2)) {', color: params.foregroundColor });
@@ -551,7 +612,8 @@ function drawTableRow(cells, y, rowColor) {
 // Which dot is which, above the code. The curve starts and ends on anchor
 // points; control points pull it towards them without it touching them.
 function drawLegend(step) {
-  if (!showLegend) return;
+  //the values step has no points, so nothing to explain
+  if (!showLegend || step.showValues) return;
 
   const hasControlPoints = step.showLetter || step.showTable || step.pointCount > 2;
   const entries = [{ label: 'anchor point', dotColor: anchorColor }];
