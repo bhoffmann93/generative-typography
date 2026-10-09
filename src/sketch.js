@@ -42,6 +42,7 @@ const params = {
 };
 
 const STEPS = [
+  { title: 'Interpolation', showIntro: true },
   { title: 'lerp | mix values', showValues: true },
   { title: 'lerp | mix positions', pointCount: 2, lerpRounds: 1 },
   { title: 'Two lerps', pointCount: 3, lerpRounds: 1 },
@@ -73,7 +74,7 @@ const roundColors = [
   { r: 204, g: 182, b: 79 },
 ];
 
-// The first step: a circle that turns from red to green, a square that grows
+// The values step: a circle that turns from red to green, a square that grows
 // and an arrow that turns, all three lerped by t.
 const valueRed = { r: 220, g: 50, b: 50 };
 const valueGreen = { r: 60, g: 190, b: 90 };
@@ -86,6 +87,10 @@ const VALUE_ARROW = { length: 160, thickness: 16, headSize: 50 };
 // the shapes their line of pseudocode sits
 const VALUE_SPACING = 300;
 const VALUE_LABEL_Y = 140;
+
+// the intro's big line, and how far below it the small line sits
+const INTRO_SIZE = 90;
+const INTRO_LINE_GAP = 80;
 
 const POINT_SIZE = 14;
 const LETTER_POINT_SIZE = 7;
@@ -158,7 +163,9 @@ window.draw = function draw() {
 
   push();
   translate(zoomedWidth() / 2, zoomedHeight() / 2);
-  if (step.showValues) {
+  if (step.showIntro) {
+    drawIntroStep();
+  } else if (step.showValues) {
     drawValuesStep();
   } else if (step.showLetter) {
     drawLetterStep();
@@ -178,8 +185,7 @@ window.draw = function draw() {
   } else {
     drawCode(codeLines(step));
   }
-  //the table has no t, so it has no slider
-  if (!step.showTable) drawSlider();
+  if (hasSlider(step)) drawSlider();
   pop();
 
   updateCursor();
@@ -202,6 +208,20 @@ function zoomedMouseX() {
 
 function zoomedMouseY() {
   return mouseY / params.zoom;
+}
+
+// The first step: only the word, before any example.
+function drawIntroStep() {
+  noStroke();
+  fill(params.foregroundColor.r, params.foregroundColor.g, params.foregroundColor.b);
+  if (uiFont) textFont(uiFont);
+  textAlign(CENTER, CENTER);
+  textSize(INTRO_SIZE);
+  text('lerp == mixing', 0, 0);
+
+  fill(lineColor.r, lineColor.g, lineColor.b);
+  textSize(labelSize);
+  text('short for linear interpolation a mix of two things, by an amount t', 0, INTRO_LINE_GAP);
 }
 
 // lerp mixes any two values, not only positions: a color, a size, an angle.
@@ -392,8 +412,8 @@ function codeLines(step) {
 
   //src/config.js decides which steps show their code
   if (!step.showLetter && !showCode) return [];
-  //the values step has its pseudocode under the shapes instead
-  if (step.showValues) return [];
+  //the intro has no code, and the values step has its pseudocode under the shapes
+  if (step.showIntro || step.showValues) return [];
   if (step.showLetter) {
     lines.push({ code: `let letters = textToCurves(font, '${params.text}', 0, 0);`, color: params.foregroundColor });
     lines.push({ code: 'for (let curve of letters.flat(2)) {', color: params.foregroundColor });
@@ -570,7 +590,8 @@ function drawPointTable() {
   const tableTop = CODE_Y + (headerLines.length + 1) * rowHeight;
   const rowsThatFit = floor((zoomedHeight() - SLIDER_BOTTOM - tableTop) / rowHeight);
   const visibleRows = rows.slice(0, rowsThatFit);
-  if (rowsThatFit > 0 && rows.length > rowsThatFit) visibleRows[rowsThatFit - 1] = { heading: `${rows.length - rowsThatFit + 1} more rows` };
+  if (rowsThatFit > 0 && rows.length > rowsThatFit)
+    visibleRows[rowsThatFit - 1] = { heading: `${rows.length - rowsThatFit + 1} more rows` };
 
   drawTableRow({ number: '#', kind: 'point', x: 'x', y: 'y' }, tableTop - rowHeight, lineColor);
   visibleRows.forEach((row, index) => {
@@ -583,7 +604,12 @@ function drawPointTable() {
     }
 
     const dotColor = row.point.isAnchor ? anchorColor : controlPointColor;
-    drawDot(createVector(CODE_X + TABLE_COLUMNS.kind - TABLE_POINT_SIZE * 2, y + codeSize / 2), dotColor, '', TABLE_POINT_SIZE);
+    drawDot(
+      createVector(CODE_X + TABLE_COLUMNS.kind - TABLE_POINT_SIZE * 2, y + codeSize / 2),
+      dotColor,
+      '',
+      TABLE_POINT_SIZE,
+    );
     //+ 0 turns -0 into 0
     const cells = {
       number: row.number,
@@ -612,8 +638,8 @@ function drawTableRow(cells, y, rowColor) {
 // Which dot is which, above the code. The curve starts and ends on anchor
 // points; control points pull it towards them without it touching them.
 function drawLegend(step) {
-  //the values step has no points, so nothing to explain
-  if (!showLegend || step.showValues) return;
+  //the intro and the values step have no points, so nothing to explain
+  if (!showLegend || step.showIntro || step.showValues) return;
 
   const hasControlPoints = step.showLetter || step.showTable || step.pointCount > 2;
   const entries = [{ label: 'anchor point', dotColor: anchorColor }];
@@ -721,11 +747,18 @@ function drawSlider() {
   text(playing ? 'pause' : 'play', sliderLeft() - PLAY_INNER, sliderY());
 }
 
+// The intro has no t yet, and the table has no t at all, so neither has a slider.
+function hasSlider(step) {
+  return !step.showIntro && !step.showTable;
+}
+
 function isOverSlider(x, y) {
+  if (!hasSlider(STEPS[stepIndex])) return false;
   return abs(y - sliderY()) < GRAB_RADIUS && x > sliderLeft() - GRAB_RADIUS && x < sliderRight() + GRAB_RADIUS;
 }
 
 function isOverPlay(x, y) {
+  if (!hasSlider(STEPS[stepIndex])) return false;
   return abs(y - sliderY()) < GRAB_RADIUS && x > sliderLeft() - PLAY_OUTER && x < sliderLeft() - PLAY_INNER;
 }
 
@@ -812,7 +845,7 @@ window.keyPressed = function keyPressed(event) {
 
   if (keyCode === LEFT_ARROW) changeStep(-1);
   if (keyCode === RIGHT_ARROW) changeStep(1);
-  if (key === ' ') togglePlaying();
+  if (key === ' ' && hasSlider(STEPS[stepIndex])) togglePlaying();
 };
 
 window.windowResized = function windowResized() {
