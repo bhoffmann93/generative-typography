@@ -241,7 +241,7 @@ function drawValuesStep() {
   if (uiFont) textFont(uiFont);
   textAlign(CENTER, TOP);
   textSize(labelSize);
-  text('lerp(red, green, t)', -VALUE_SPACING, VALUE_LABEL_Y);
+  text('lerpColor(red, green, t)', -VALUE_SPACING, VALUE_LABEL_Y);
   text('lerp(small, big, t)', 0, VALUE_LABEL_Y);
   text('lerp(0°, 180°, t)', VALUE_SPACING, VALUE_LABEL_Y);
 }
